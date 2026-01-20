@@ -4,13 +4,15 @@ import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as CANNON from 'cannon-es';
 import { Vector3, Euler } from 'three';
 import { useGameStore } from '../store/gameStore';
-import { CarController, CarControls } from '../utils/carController';
+import { AdvancedCarController } from '../utils/advancedCarController';
 import { createPhysicsWorld, createGroundBody, createCarBody } from '../utils/physics';
 import { getCheckpointPosition, getTotalLaps } from '../utils/trackData';
-import Car from './components/Car';
-import Track from './components/Track';
-import HUD from '../components/HUD';
-import { CarType } from '../../../shared/types/index';
+import RealisticCar from './components/RealisticCar';
+import AdvancedTrack from './components/AdvancedTrack';
+import AdvancedHUD from '../components/AdvancedHUD';
+import { TireSmokeEffect, ExhaustEffect, CrashDustEffect } from '../components/ParticleSystem';
+import { CarType, DifficultyLevel } from '../../../shared/types/index';
+import { getTrackConfig } from '../utils/trackData';
 
 export default function RaceScene() {
   const { currentLobby, raceState, localPlayerId, socket, finishRace } = useGameStore();
@@ -24,22 +26,30 @@ export default function RaceScene() {
   const [raceStartTime, setRaceStartTime] = useState(0);
   const [lastLapTime, setLastLapTime] = useState(0);
   const [hasFinished, setHasFinished] = useState(false);
+  const [carDamage, setCarDamage] = useState(0);
+  const [tireGrip, setTireGrip] = useState(1.0);
+  const [tireTemperature, setTireTemperature] = useState(80);
+  const [showTireSmoke, setShowTireSmoke] = useState(false);
+  const [showExhaust, setShowExhaust] = useState(false);
+  const [showCrashDust, setShowCrashDust] = useState(false);
 
   const worldRef = useRef<CANNON.World | null>(null);
   const carBodyRef = useRef<CANNON.Body | null>(null);
-  const carControllerRef = useRef<CarController | null>(null);
-  const controlsRef = useRef<CarControls>({
+  const carControllerRef = useRef<AdvancedCarController | null>(null);
+  const controlsRef = useRef({
     forward: false,
     backward: false,
     left: false,
     right: false,
-    brake: false
+    brake: false,
+    handbrake: false
   });
   const animationFrameRef = useRef<number>();
   const lastUpdateRef = useRef<number>(Date.now());
-  const otherPlayersRef = useRef<Map<string, { position: Vector3; rotation: Euler }>>(new Map());
+  const otherPlayersRef = useRef<Map<string, { position: Vector3; rotation: Euler; carType: CarType }>>(new Map());
 
   const totalLaps = currentLobby ? getTotalLaps(currentLobby.difficulty) : 3;
+  const trackConfig = currentLobby ? getTrackConfig(currentLobby.trackType) : null;
 
   useEffect(() => {
     if (!currentLobby || !raceState) return;
@@ -48,16 +58,22 @@ export default function RaceScene() {
     const groundBody = createGroundBody();
     world.addBody(groundBody);
 
+    // Get start position based on track type
     const startPos = new CANNON.Vec3(
-      currentLobby.trackType === 'city' ? 0 : 0,
+      currentLobby.trackType === 'city' ? 0 : 
+      currentLobby.trackType === 'mountain' ? 0 : 0,
       2,
-      currentLobby.trackType === 'city' ? 5 : 10
+      currentLobby.trackType === 'city' ? 5 : 
+      currentLobby.trackType === 'mountain' ? 5 : 10
     );
+    
     const carBody = createCarBody(1000);
     carBody.position.copy(startPos);
     world.addBody(carBody);
 
-    const controller = new CarController(carBody, CarType.BALANCED, currentLobby.difficulty);
+    // Use advanced car controller with selected car type
+    const playerCarType = CarType.BALANCED; // Default, should be from player selection
+    const controller = new AdvancedCarController(carBody, playerCarType, currentLobby.difficulty);
 
     worldRef.current = world;
     carBodyRef.current = carBody;
@@ -74,11 +90,21 @@ export default function RaceScene() {
         controller.update();
         world.step(1 / 60, deltaTime, 3);
 
-        setSpeed(controller.getSpeed());
+        const physicsState = controller.getPhysicsState();
+        setSpeed(physicsState.speed);
+        setCarDamage(physicsState.damage);
+        setTireGrip(physicsState.grip);
+        setTireTemperature(physicsState.tireTemp);
         setLapTime(now - lastLapTime);
+
+        // Update particle effects
+        setShowTireSmoke(physicsState.grip < 0.4 || physicsState.speed > 80);
+        setShowExhaust(controlsRef.current.forward || physicsState.speed > 20);
+        setShowCrashDust(physicsState.damage > 15 || carBody.velocity.length() > 15);
 
         checkCheckpoints(carBody);
 
+        // Send car state to server
         if (socket && now % 100 < 16) {
           socket.emit('updateCarState', {
             position: { x: carBody.position.x, y: carBody.position.y, z: carBody.position.z },
@@ -94,10 +120,10 @@ export default function RaceScene() {
               y: carBody.angularVelocity.y,
               z: carBody.angularVelocity.z
             },
-            damage: 0,
+            damage: physicsState.damage,
             currentLap,
             lastCheckpoint,
-            speed: controller.getSpeed()
+            speed: physicsState.speed
           });
         }
       }
@@ -112,16 +138,18 @@ export default function RaceScene() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [currentLobby, raceState]);
+  }, [currentLobby, raceState, socket]);
 
   useEffect(() => {
     if (!socket) return;
 
     const handlePlayerStateUpdate = (playerId: string, state: any) => {
       if (playerId !== localPlayerId) {
+        const player = currentLobby?.players.find(p => p.id === playerId);
         otherPlayersRef.current.set(playerId, {
           position: new Vector3(state.position.x, state.position.y, state.position.z),
-          rotation: new Euler(state.rotation.x, state.rotation.y, state.rotation.z)
+          rotation: new Euler(state.rotation.x, state.rotation.y, state.rotation.z),
+          carType: player?.carType || CarType.BALANCED
         });
       }
     };
@@ -131,7 +159,7 @@ export default function RaceScene() {
     return () => {
       socket.off('playerStateUpdate', handlePlayerStateUpdate);
     };
-  }, [socket, localPlayerId]);
+  }, [socket, localPlayerId, currentLobby]);
 
   const checkCheckpoints = useCallback((carBody: CANNON.Body) => {
     if (!currentLobby || hasFinished) return;
@@ -193,13 +221,16 @@ export default function RaceScene() {
         case ' ':
           controlsRef.current.brake = true;
           break;
+        case 'shift':
+          controlsRef.current.handbrake = true;
+          break;
         case 'c':
           setCameraMode(mode => mode === 'follow' ? 'orbit' : mode === 'orbit' ? 'top' : 'follow');
           break;
         case 'r':
-          if (carBodyRef.current && currentLobby) {
+          if (carBodyRef.current && carControllerRef.current && currentLobby) {
             const startPos = new CANNON.Vec3(0, 2, 5);
-            carControllerRef.current?.reset(startPos, 0);
+            carControllerRef.current.reset(startPos, 0);
           }
           break;
       }
@@ -230,6 +261,9 @@ export default function RaceScene() {
         case ' ':
           controlsRef.current.brake = false;
           break;
+        case 'shift':
+          controlsRef.current.handbrake = false;
+          break;
       }
       
       if (carControllerRef.current) {
@@ -252,61 +286,89 @@ export default function RaceScene() {
 
   const playerCar = carBodyRef.current;
   const totalPlayers = currentLobby.players.length;
+  const localPlayer = currentLobby.players.find(p => p.id === localPlayerId);
+  const selectedCarType = localPlayer?.carType || CarType.BALANCED;
 
   return (
     <>
       <Canvas shadows>
         <PerspectiveCamera makeDefault position={[0, 10, 20]} />
         
-        <ambientLight intensity={0.5} />
-        <directionalLight
-          position={[50, 50, 0]}
-          intensity={1}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-          shadow-camera-left={-50}
-          shadow-camera-right={50}
-          shadow-camera-top={50}
-          shadow-camera-bottom={-50}
-        />
-        <hemisphereLight args={['#87CEEB', '#2d5016', 0.3]} />
+        {/* Advanced Lighting based on track */}
+        {trackConfig && (
+          <AdvancedLighting timeOfDay={trackConfig.timeOfDay} />
+        )}
 
-        <Track trackType={currentLobby.trackType} />
+        {/* Advanced Track */}
+        {trackConfig && (
+          <AdvancedTrack trackConfig={trackConfig} />
+        )}
 
+        {/* Player Car with realistic model */}
         {playerCar && (
-          <PlayerCarWrapper
+          <PlayerRealisticCar
             carBody={playerCar}
-            color={currentLobby.players.find(p => p.id === localPlayerId)?.color}
+            carType={selectedCarType}
+            color={localPlayer?.color}
+            damage={carDamage}
           />
         )}
 
+        {/* Particle Effects */}
+        {playerCar && showTireSmoke && (
+          <TireSmokeEffect
+            position={[playerCar.position.x, playerCar.position.y - 0.5, playerCar.position.z]}
+            intensity={tireGrip < 0.5 ? 1.0 : 0.5}
+            enabled={true}
+          />
+        )}
+
+        {playerCar && showExhaust && (
+          <ExhaustEffect
+            position={[playerCar.position.x, playerCar.position.y - 0.5, playerCar.position.z - 2.5]}
+            intensity={controlsRef.current.forward ? 0.8 : 0.3}
+            enabled={true}
+          />
+        )}
+
+        {playerCar && showCrashDust && (
+          <CrashDustEffect
+            position={[playerCar.position.x, playerCar.position.y, playerCar.position.z]}
+            intensity={carDamage > 20 ? 0.8 : 0.3}
+            enabled={true}
+          />
+        )}
+
+        {/* Other players with realistic cars */}
         {Array.from(otherPlayersRef.current.entries()).map(([playerId, data]) => {
           const player = currentLobby.players.find(p => p.id === playerId);
           return (
-            <Car
+            <RealisticCar
               key={playerId}
               position={[data.position.x, data.position.y, data.position.z]}
               rotation={[data.rotation.x, data.rotation.y, data.rotation.z]}
+              carType={data.carType}
               color={player?.color}
             />
           );
         })}
 
+        {/* Camera modes */}
         {cameraMode === 'orbit' && <OrbitControls />}
         {cameraMode === 'follow' && playerCar && (
-          <FollowCamera
+          <AdvancedFollowCamera
             carBody={playerCar}
+            carController={carControllerRef.current}
           />
         )}
         {cameraMode === 'top' && playerCar && (
-          <TopCamera
+          <AdvancedTopCamera
             target={new Vector3(playerCar.position.x, playerCar.position.y, playerCar.position.z)}
           />
         )}
       </Canvas>
 
-      <HUD
+      <AdvancedHUD
         speed={speed}
         position={1}
         totalPlayers={totalPlayers}
@@ -314,34 +376,66 @@ export default function RaceScene() {
         totalLaps={totalLaps}
         lapTime={lapTime}
         bestLapTime={bestLapTime}
+        carDamage={carDamage}
+        tireGrip={tireGrip}
+        tireTemperature={tireTemperature}
+        carType={selectedCarType}
+        cameraMode={cameraMode}
+        onCameraModeChange={setCameraMode}
       />
     </>
   );
 }
 
-function PlayerCarWrapper({ carBody, color }: { carBody: CANNON.Body; color?: string }) {
+function PlayerRealisticCar({ 
+  carBody, 
+  carType, 
+  color, 
+  damage 
+}: { 
+  carBody: CANNON.Body; 
+  carType: CarType; 
+  color?: string; 
+  damage: number;
+}) {
   const euler = new CANNON.Vec3();
   carBody.quaternion.toEuler(euler);
   
   return (
-    <Car
+    <RealisticCar
       position={[carBody.position.x, carBody.position.y, carBody.position.z]}
       rotation={[euler.x, euler.y, euler.z]}
+      carType={carType}
       color={color}
+      damage={damage}
     />
   );
 }
 
-function FollowCamera({ carBody }: { carBody: CANNON.Body }) {
+function AdvancedFollowCamera({ 
+  carBody, 
+  carController 
+}: { 
+  carBody: CANNON.Body; 
+  carController: AdvancedCarController | null;
+}) {
   const cameraRef = useRef<any>();
 
   useEffect(() => {
-    if (cameraRef.current) {
+    if (cameraRef.current && carBody) {
       const euler = new CANNON.Vec3();
       carBody.quaternion.toEuler(euler);
       const target = new Vector3(carBody.position.x, carBody.position.y, carBody.position.z);
-      const offset = new Vector3(0, 5, 10);
+      
+      // Dynamic camera distance based on speed
+      const speed = carController?.getSpeed() || 0;
+      const baseDistance = 8;
+      const speedBonus = Math.min(speed / 50, 5);
+      const distance = baseDistance + speedBonus;
+      
+      const offset = new Vector3(0, 4, distance);
       const rotatedOffset = offset.applyAxisAngle(new Vector3(0, 1, 0), euler.y);
+      
       cameraRef.current.position.copy(target).add(rotatedOffset);
       cameraRef.current.lookAt(target);
     }
@@ -350,15 +444,75 @@ function FollowCamera({ carBody }: { carBody: CANNON.Body }) {
   return <PerspectiveCamera ref={cameraRef} makeDefault />;
 }
 
-function TopCamera({ target }: { target: Vector3 }) {
+function AdvancedTopCamera({ target }: { target: Vector3 }) {
   const cameraRef = useRef<any>();
 
   useEffect(() => {
     if (cameraRef.current) {
-      cameraRef.current.position.set(target.x, target.y + 30, target.z);
+      cameraRef.current.position.set(target.x, target.y + 40, target.z);
       cameraRef.current.lookAt(target);
     }
   });
 
   return <PerspectiveCamera ref={cameraRef} makeDefault />;
+}
+
+function AdvancedLighting({ timeOfDay }: { timeOfDay: string }) {
+  const getLightingConfig = () => {
+    switch (timeOfDay) {
+      case 'day':
+        return {
+          ambient: { intensity: 0.6, color: '#87CEEB' },
+          directional: { intensity: 1.2, color: '#ffffff', position: [100, 100, 50] },
+          shadows: true
+        };
+      case 'night':
+        return {
+          ambient: { intensity: 0.2, color: '#191970' },
+          directional: { intensity: 0.3, color: '#4169E1', position: [-50, 50, -50] },
+          shadows: true
+        };
+      case 'sunset':
+        return {
+          ambient: { intensity: 0.4, color: '#FF6347' },
+          directional: { intensity: 0.8, color: '#FF4500', position: [50, 50, 0] },
+          shadows: true
+        };
+      case 'dawn':
+        return {
+          ambient: { intensity: 0.3, color: '#FFA07A' },
+          directional: { intensity: 0.9, color: '#FF69B4', position: [75, 75, 25] },
+          shadows: true
+        };
+      default:
+        return {
+          ambient: { intensity: 0.5, color: '#ffffff' },
+          directional: { intensity: 1, color: '#ffffff', position: [50, 50, 0] },
+          shadows: true
+        };
+    }
+  };
+
+  const config = getLightingConfig();
+
+  return (
+    <>
+      <ambientLight intensity={config.ambient.intensity} color={config.ambient.color} />
+      <directionalLight
+        position={config.directional.position}
+        intensity={config.directional.intensity}
+        color={config.directional.color}
+        castShadow={config.shadows}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-left={-200}
+        shadow-camera-right={200}
+        shadow-camera-top={200}
+        shadow-camera-bottom={-200}
+      />
+      <hemisphereLight 
+        args={[config.ambient.color, '#2d5016', 0.3]} 
+      />
+    </>
+  );
 }
