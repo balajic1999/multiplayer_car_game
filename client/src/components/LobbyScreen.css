@@ -1,0 +1,133 @@
+.lobby-screen {
+  max-width: 800px;
+  width: 90%;
+}
+
+.lobby-screen h1 {
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 2rem;
+}
+
+.lobby-details {
+  text-align: center;
+  margin-bottom: 30px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.lobby-details p {
+  margin: 5px 0;
+  font-size: 1.1rem;
+}
+
+.players-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.player-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.3s ease;
+}
+
+.player-card.ready {
+  border-color: #38ef7d;
+  background: rgba(56, 239, 125, 0.1);
+}
+
+.player-color {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid white;
+}
+
+.player-info {
+  flex: 1;
+}
+
+.player-info h3 {
+  margin: 0;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.player-info p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: capitalize;
+}
+
+.ready-badge {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.player-card.ready .ready-badge {
+  background: rgba(56, 239, 125, 0.2);
+  color: #38ef7d;
+}
+
+.lobby-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.lobby-actions button {
+  min-width: 150px;
+}
+
+.lobby-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.countdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.countdown-number {
+  font-size: 10rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: pulse 1s ease-in-out;
+}
+
+.countdown-overlay p {
+  font-size: 1.5rem;
+  margin-top: 20px;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
