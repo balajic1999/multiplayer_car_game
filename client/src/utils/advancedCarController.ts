@@ -32,11 +32,12 @@ export class AdvancedCarController {
   private suspensionConstraints: CANNON.DistanceConstraint[] = [];
   private lastUpdateTime: number = 0;
   
-  // Physics constants
-  private readonly ENGINE_FORCE = 3000;
-  private readonly BRAKE_FORCE = 2000;
-  private readonly MAX_SPEED = 120; // km/h
-  private readonly GRAVITY = -9.82;
+  // Physics constants - More realistic values
+  private readonly ENGINE_FORCE = 1500;
+  private readonly BRAKE_FORCE = 800;
+  private readonly MAX_SPEED = 150; // km/h
+  private readonly STEER_FORCE = 8;
+  private readonly STEER_SPEED_FACTOR = 0.7;
   
   // Suspension settings
   private readonly SUSPENSION_STIFFNESS = 30;
@@ -72,38 +73,25 @@ export class AdvancedCarController {
 
   private setupAdvancedPhysics() {
     const carStats = CAR_STATS[this.carType];
-    const difficultySettings = DIFFICULTY_SETTINGS[this.difficulty];
     
-    // Enhanced material properties
+    // Enhanced material properties with better friction
     const material = new CANNON.Material('carMaterial');
-    const contactMaterial = new CANNON.ContactMaterial(material, material, {
-      friction: 0.4,
-      restitution: 0.1,
-      contactEquationStiffness: 1e8,
-      contactEquationRelaxation: 3,
-      frictionEquationStiffness: 1e8,
-      frictionEquationRelaxation: 3
-    });
     
     this.carBody.material = material;
     this.carBody.mass = carStats.weight;
-    this.carBody.linearDamping = 0.01;
-    this.carBody.angularDamping = 0.3;
+    this.carBody.linearDamping = 0.15;
+    this.carBody.angularDamping = 0.5;
     
-    // More realistic shape for better physics
-    const shape = new CANNON.Box(new CANNON.Vec3(1, 0.4, 2));
-    this.carBody.addShape(shape, new CANNON.Vec3(0, 0, 0));
-    
-    // Center of mass adjustments for different car types
+    // Center of mass adjustments for different car types (affects handling)
     switch (this.carType) {
       case CarType.SPEEDSTER:
-        this.carBody.centerOfMass = new CANNON.Vec3(0, -0.1, 0); // Lower center of mass
+        this.carBody.centerOfMass = new CANNON.Vec3(0, -0.2, 0.1);
         break;
       case CarType.HEAVY:
-        this.carBody.centerOfMass = new CANNON.Vec3(0, 0.1, 0); // Higher center of mass
+        this.carBody.centerOfMass = new CANNON.Vec3(0, -0.05, 0);
         break;
       default:
-        this.carBody.centerOfMass = new CANNON.Vec3(0, 0, 0);
+        this.carBody.centerOfMass = new CANNON.Vec3(0, -0.15, 0.05);
     }
   }
 
@@ -196,18 +184,12 @@ export class AdvancedCarController {
   }
 
   private updatePhysics(deltaTime: number) {
-    const carStats = CAR_STATS[this.carType];
-    const difficultySettings = DIFFICULTY_SETTINGS[this.difficulty];
-    
-    // Apply gravity
-    this.carBody.applyForce(new CANNON.Vec3(0, this.GRAVITY * this.carBody.mass, 0));
-    
-    // Update wheel physics
-    this.wheelBodies.forEach((wheel, index) => {
-      // Suspension forces
-      const springForce = this.calculateSpringForce(wheel);
-      wheel.applyForce(springForce, wheel.position);
-    });
+    // Limit max speed
+    const currentSpeed = this.carBody.velocity.length() * 3.6;
+    if (currentSpeed > this.MAX_SPEED) {
+      const velocityDirection = this.carBody.velocity.clone().normalize();
+      this.carBody.velocity.copy(velocityDirection.scale(this.MAX_SPEED / 3.6));
+    }
   }
 
   private calculateSpringForce(wheelBody: CANNON.Body): CANNON.Vec3 {
@@ -228,90 +210,112 @@ export class AdvancedCarController {
     const carStats = CAR_STATS[this.carType];
     const difficultySettings = DIFFICULTY_SETTINGS[this.difficulty];
     
-    // Calculate steering based on speed
     const speed = this.physics.speed;
-    const maxSteer = Math.max(0.1, 1 - (speed / 100)); // Less steering at high speed
+    const speedFactor = Math.max(0.3, 1 - (speed / this.MAX_SPEED) * this.STEER_SPEED_FACTOR);
     
-    // Steering forces
+    // Improved steering with angular velocity
+    let steerAngle = 0;
     if (this.controls.left) {
-      const steerForce = this.ENGINE_FORCE * 0.3 * maxSteer;
-      this.carBody.applyLocalForce(
-        new CANNON.Vec3(-steerForce, 0, 0),
-        new CANNON.Vec3(0, 0, -2)
-      );
+      steerAngle = this.STEER_FORCE * speedFactor;
     }
-    
     if (this.controls.right) {
-      const steerForce = this.ENGINE_FORCE * 0.3 * maxSteer;
-      this.carBody.applyLocalForce(
-        new CANNON.Vec3(steerForce, 0, 0),
-        new CANNON.Vec3(0, 0, -2)
-      );
+      steerAngle = -this.STEER_FORCE * speedFactor;
     }
     
-    // Acceleration and braking
+    if (steerAngle !== 0) {
+      const angularVelocity = new CANNON.Vec3(0, steerAngle, 0);
+      this.carBody.angularVelocity.y = angularVelocity.y;
+    }
+    
+    // Forward acceleration with speed-based power curve
     if (this.controls.forward) {
-      const engineForce = this.ENGINE_FORCE * (carStats.acceleration / 100) * difficultySettings.physicsRealism;
+      const speedRatio = speed / this.MAX_SPEED;
+      const powerMultiplier = Math.max(0.3, 1 - speedRatio * 0.7);
+      const engineForce = this.ENGINE_FORCE * 
+        (carStats.acceleration / 100) * 
+        difficultySettings.physicsRealism * 
+        powerMultiplier;
+      
       this.carBody.applyLocalForce(
-        new CANNON.Vec3(0, 0, engineForce),
+        new CANNON.Vec3(0, 0, -engineForce),
         new CANNON.Vec3(0, 0, 0)
       );
     }
     
+    // Backward/Reverse
     if (this.controls.backward) {
-      const brakeForce = this.BRAKE_FORCE * (this.controls.handbrake ? 1.5 : 1);
-      const force = speed > 5 ? brakeForce : this.ENGINE_FORCE * 0.5; // Reverse if slow
-      this.carBody.applyLocalForce(
-        new CANNON.Vec3(0, 0, -force),
-        new CANNON.Vec3(0, 0, 0)
-      );
+      if (speed > 5) {
+        const brakeForce = this.BRAKE_FORCE * (this.controls.handbrake ? 1.5 : 1);
+        this.carBody.applyLocalForce(
+          new CANNON.Vec3(0, 0, brakeForce),
+          new CANNON.Vec3(0, 0, 0)
+        );
+      } else {
+        this.carBody.applyLocalForce(
+          new CANNON.Vec3(0, 0, this.ENGINE_FORCE * 0.4),
+          new CANNON.Vec3(0, 0, 0)
+        );
+      }
     }
     
-    // Braking
-    if (this.controls.brake) {
+    // Dedicated brake
+    if (this.controls.brake && !this.controls.backward) {
       const velocity = this.carBody.velocity.clone();
-      const brakingForce = velocity.scale(-this.BRAKE_FORCE * deltaTime);
-      this.carBody.applyForce(brakingForce, this.carBody.position);
+      if (velocity.length() > 0.1) {
+        const brakingForce = velocity.normalize().scale(-this.BRAKE_FORCE * 0.8);
+        this.carBody.applyForce(brakingForce, this.carBody.position);
+      }
     }
     
     // Handbrake for drifting
-    if (this.controls.handbrake) {
+    if (this.controls.handbrake && speed > 10) {
       this.applyHandbrake();
     }
     
-    // Air resistance
+    // Realistic air resistance
     this.applyAirResistance();
+    
+    // Apply rolling resistance
+    this.applyRollingResistance();
   }
 
   private applyHandbrake() {
-    const velocity = this.carBody.velocity.clone();
-    const horizontalVelocity = new CANNON.Vec3(velocity.x, 0, velocity.z);
-    
-    // Reduce grip and add rotational force
     this.physics.grip = 0.3;
     
-    const rotationalForce = new CANNON.Vec3(
-      -velocity.z * 2,
-      0,
-      velocity.x * 2
-    );
+    const lateralVelocity = new CANNON.Vec3();
+    this.carBody.vectorToWorldFrame(new CANNON.Vec3(1, 0, 0), lateralVelocity);
     
-    this.carBody.applyForce(rotationalForce, this.carBody.position);
+    const lateralSpeed = this.carBody.velocity.dot(lateralVelocity);
+    const driftForce = lateralVelocity.scale(-lateralSpeed * 5);
+    
+    this.carBody.applyForce(driftForce, this.carBody.position);
+    
+    this.carBody.angularVelocity.y *= 1.3;
   }
 
   private applyAirResistance() {
     const velocity = this.carBody.velocity;
     const speed = velocity.length();
     
-    if (speed > 0) {
-      const dragCoefficient = 0.425; // Typical car drag coefficient
-      const frontalArea = this.getCarFrontalArea();
-      const airDensity = 1.225; // kg/m³
+    if (speed > 0.1) {
+      const dragCoefficient = 0.015;
+      const dragForce = speed * speed * dragCoefficient;
+      const dragDirection = velocity.clone().normalize().scale(-dragForce);
       
-      const dragForce = speed * speed * dragCoefficient * frontalArea * airDensity;
-      const dragDirection = velocity.clone().scale(-1 / speed);
+      this.carBody.applyForce(dragDirection, this.carBody.position);
+    }
+  }
+
+  private applyRollingResistance() {
+    const velocity = this.carBody.velocity;
+    const speed = velocity.length();
+    
+    if (speed > 0.1) {
+      const rollingCoefficient = 0.02;
+      const rollingForce = speed * rollingCoefficient * this.carBody.mass;
+      const rollingDirection = velocity.clone().normalize().scale(-rollingForce);
       
-      this.carBody.applyForce(dragDirection.scale(dragForce), this.carBody.position);
+      this.carBody.applyForce(rollingDirection, this.carBody.position);
     }
   }
 

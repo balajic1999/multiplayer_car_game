@@ -6,17 +6,18 @@
   width: 100vw;
   height: 100vh;
   pointer-events: none;
-  z-index: 100;
-  font-family: 'Orbitron', monospace;
+  z-index: 1000;
+  font-family: 'Orbitron', sans-serif;
   color: white;
 }
 
 /* Top Left - Position and Lap */
 .hud-top-left {
   position: absolute;
-  top: 30px;
-  left: 30px;
+  top: 20px;
+  left: 20px;
   pointer-events: none;
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
 }
 
 .position-container {
@@ -30,7 +31,10 @@
   font-size: 4rem;
   font-weight: 900;
   color: #00ff88;
-  text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+  text-shadow: 
+    0 0 20px rgba(0, 255, 136, 0.8),
+    0 0 40px rgba(0, 255, 136, 0.4),
+    2px 2px 4px rgba(0, 0, 0, 0.8);
   line-height: 1;
 }
 
@@ -50,11 +54,14 @@
 }
 
 .lap-container {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.85);
   padding: 15px 20px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 255, 136, 0.3);
-  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 2px solid rgba(0, 255, 136, 0.4);
+  backdrop-filter: blur(15px);
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .lap-label {
@@ -429,12 +436,23 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2000;
   pointer-events: all;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .controls-panel,

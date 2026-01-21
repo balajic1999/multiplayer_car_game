@@ -58,13 +58,12 @@ export default function RaceScene() {
     const groundBody = createGroundBody();
     world.addBody(groundBody);
 
-    // Get start position based on track type
+    // Get start position from first checkpoint
+    const startCheckpoint = trackConfig?.checkpoints[0];
     const startPos = new CANNON.Vec3(
-      currentLobby.trackType === 'city' ? 0 : 
-      currentLobby.trackType === 'mountain' ? 0 : 0,
+      startCheckpoint?.x || 0,
       2,
-      currentLobby.trackType === 'city' ? 5 : 
-      currentLobby.trackType === 'mountain' ? 5 : 10
+      startCheckpoint?.z || 0
     );
     
     const carBody = createCarBody(1000);
@@ -172,7 +171,9 @@ export default function RaceScene() {
       Math.pow(carBody.position.z - checkpointPos.z, 2)
     );
 
-    if (distance < 8) {
+    const checkpointRadius = 15;
+
+    if (distance < checkpointRadius) {
       const totalCheckpoints = currentLobby ? 10 : 10;
       const nextCheckpoint = (lastCheckpoint + 1) % totalCheckpoints;
 
@@ -228,9 +229,10 @@ export default function RaceScene() {
           setCameraMode(mode => mode === 'follow' ? 'orbit' : mode === 'orbit' ? 'top' : 'follow');
           break;
         case 'r':
-          if (carBodyRef.current && carControllerRef.current && currentLobby) {
-            const startPos = new CANNON.Vec3(0, 2, 5);
-            carControllerRef.current.reset(startPos, 0);
+          if (carBodyRef.current && carControllerRef.current && currentLobby && trackConfig) {
+            const resetCheckpoint = trackConfig.checkpoints[lastCheckpoint] || trackConfig.checkpoints[0];
+            const resetPos = new CANNON.Vec3(resetCheckpoint.x, 2, resetCheckpoint.z);
+            carControllerRef.current.reset(resetPos, 0);
           }
           break;
       }
@@ -278,7 +280,7 @@ export default function RaceScene() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [currentLobby]);
+  }, [currentLobby, trackConfig, lastCheckpoint]);
 
   if (!currentLobby || !raceState) {
     return null;
@@ -420,41 +422,55 @@ function AdvancedFollowCamera({
   carController: AdvancedCarController | null;
 }) {
   const cameraRef = useRef<any>();
+  const targetPosRef = useRef(new Vector3());
+  const currentPosRef = useRef(new Vector3());
 
   useEffect(() => {
     if (cameraRef.current && carBody) {
       const euler = new CANNON.Vec3();
       carBody.quaternion.toEuler(euler);
-      const target = new Vector3(carBody.position.x, carBody.position.y, carBody.position.z);
+      const carPosition = new Vector3(carBody.position.x, carBody.position.y, carBody.position.z);
       
       // Dynamic camera distance based on speed
       const speed = carController?.getSpeed() || 0;
-      const baseDistance = 8;
-      const speedBonus = Math.min(speed / 50, 5);
+      const baseDistance = 10;
+      const speedBonus = Math.min(speed / 40, 6);
       const distance = baseDistance + speedBonus;
+      const height = 4 + speedBonus * 0.3;
       
-      const offset = new Vector3(0, 4, distance);
+      // Calculate desired camera position behind the car
+      const offset = new Vector3(0, height, distance);
       const rotatedOffset = offset.applyAxisAngle(new Vector3(0, 1, 0), euler.y);
       
-      cameraRef.current.position.copy(target).add(rotatedOffset);
-      cameraRef.current.lookAt(target);
+      targetPosRef.current.copy(carPosition).add(rotatedOffset);
+      
+      // Smooth camera movement
+      currentPosRef.current.lerp(targetPosRef.current, 0.1);
+      
+      cameraRef.current.position.copy(currentPosRef.current);
+      cameraRef.current.lookAt(carPosition.x, carPosition.y + 1, carPosition.z);
     }
   });
 
-  return <PerspectiveCamera ref={cameraRef} makeDefault />;
+  return <PerspectiveCamera ref={cameraRef} makeDefault fov={75} />;
 }
 
 function AdvancedTopCamera({ target }: { target: Vector3 }) {
   const cameraRef = useRef<any>();
+  const currentPosRef = useRef(new Vector3());
 
   useEffect(() => {
     if (cameraRef.current) {
-      cameraRef.current.position.set(target.x, target.y + 40, target.z);
-      cameraRef.current.lookAt(target);
+      const targetPos = new Vector3(target.x, target.y + 50, target.z + 5);
+      
+      currentPosRef.current.lerp(targetPos, 0.1);
+      
+      cameraRef.current.position.copy(currentPosRef.current);
+      cameraRef.current.lookAt(target.x, target.y, target.z);
     }
   });
 
-  return <PerspectiveCamera ref={cameraRef} makeDefault />;
+  return <PerspectiveCamera ref={cameraRef} makeDefault fov={60} />;
 }
 
 function AdvancedLighting({ timeOfDay }: { timeOfDay: string }) {
