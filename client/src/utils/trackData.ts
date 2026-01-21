@@ -40,16 +40,16 @@ export const TRACK_CONFIGS: Record<TrackType, TrackConfig> = {
     difficulty: DifficultyLevel.MEDIUM,
     requiredLevel: 1,
     checkpoints: [
-      new Vector3(0, 0, 5),
-      new Vector3(80, 0, 5),
-      new Vector3(120, 0, -20),
-      new Vector3(80, 0, -80),
-      new Vector3(20, 0, -120),
-      new Vector3(-40, 0, -100),
-      new Vector3(-80, 0, -40),
-      new Vector3(-100, 0, 20),
-      new Vector3(-60, 0, 80),
-      new Vector3(-20, 0, 120)
+      new Vector3(0, 0, 0),
+      new Vector3(40, 0, 0),
+      new Vector3(70, 0, -25),
+      new Vector3(75, 0, -60),
+      new Vector3(55, 0, -90),
+      new Vector3(15, 0, -95),
+      new Vector3(-25, 0, -75),
+      new Vector3(-50, 0, -40),
+      new Vector3(-50, 0, 0),
+      new Vector3(-20, 0, 20)
     ],
     obstacles: [
       // Buildings and walls
@@ -120,16 +120,16 @@ export const TRACK_CONFIGS: Record<TrackType, TrackConfig> = {
     difficulty: DifficultyLevel.HARD,
     requiredLevel: 3,
     checkpoints: [
-      new Vector3(0, 0, 5),
-      new Vector3(50, 5, -30),
-      new Vector3(100, 15, -80),
-      new Vector3(150, 25, -40),
-      new Vector3(200, 35, 20),
-      new Vector3(180, 40, 80),
-      new Vector3(120, 35, 120),
-      new Vector3(60, 25, 100),
-      new Vector3(20, 15, 60),
-      new Vector3(-20, 8, 20)
+      new Vector3(0, 0, 0),
+      new Vector3(30, 3, -20),
+      new Vector3(55, 8, -45),
+      new Vector3(75, 15, -65),
+      new Vector3(85, 22, -80),
+      new Vector3(75, 25, -105),
+      new Vector3(50, 20, -120),
+      new Vector3(20, 12, -110),
+      new Vector3(-10, 6, -80),
+      new Vector3(-15, 2, -40)
     ],
     obstacles: [
       // Mountain walls and rocks
@@ -197,16 +197,16 @@ export const TRACK_CONFIGS: Record<TrackType, TrackConfig> = {
     difficulty: DifficultyLevel.EASY,
     requiredLevel: 1,
     checkpoints: [
-      new Vector3(0, 0, 5),
-      new Vector3(200, 0, 5),
-      new Vector3(400, 0, 15),
-      new Vector3(600, 2, 35),
-      new Vector3(800, 5, 20),
-      new Vector3(1000, 3, -10),
-      new Vector3(800, 1, -40),
-      new Vector3(600, 0, -60),
-      new Vector3(400, 0, -40),
-      new Vector3(200, 0, -20)
+      new Vector3(0, 0, 0),
+      new Vector3(80, 0, 0),
+      new Vector3(150, 0, -10),
+      new Vector3(210, 0, -30),
+      new Vector3(250, 1, -60),
+      new Vector3(250, 1, -100),
+      new Vector3(210, 0, -130),
+      new Vector3(150, 0, -140),
+      new Vector3(80, 0, -135),
+      new Vector3(20, 0, -100)
     ],
     obstacles: [
       // Sand dunes as barriers

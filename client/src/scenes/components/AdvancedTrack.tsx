@@ -24,10 +24,55 @@ export default function AdvancedTrack({ trackConfig }: AdvancedTrackProps) {
       </mesh>
     );
 
-    // Road surface
+    // Create curved road segments connecting checkpoints
+    trackConfig.checkpoints.forEach((checkpoint, index) => {
+      if (index < trackConfig.checkpoints.length - 1) {
+        const nextCheckpoint = trackConfig.checkpoints[index + 1];
+        const midX = (checkpoint.x + nextCheckpoint.x) / 2;
+        const midZ = (checkpoint.z + nextCheckpoint.z) / 2;
+        const length = Math.sqrt(
+          Math.pow(nextCheckpoint.x - checkpoint.x, 2) +
+          Math.pow(nextCheckpoint.z - checkpoint.z, 2)
+        );
+        const angle = Math.atan2(nextCheckpoint.z - checkpoint.z, nextCheckpoint.x - checkpoint.x);
+        
+        elements.push(
+          <mesh 
+            key={`road-segment-${index}`} 
+            position={[midX, 0, midZ]} 
+            rotation={[-Math.PI/2, 0, angle]}
+            receiveShadow
+          >
+            <planeGeometry args={[length, trackConfig.width * 2]} />
+            <meshStandardMaterial 
+              color="#2a2a2a" 
+              roughness={0.9} 
+              metalness={0.05}
+            />
+          </mesh>
+        );
+      }
+    });
+    
+    // Connect last checkpoint to first
+    const lastCheckpoint = trackConfig.checkpoints[trackConfig.checkpoints.length - 1];
+    const firstCheckpoint = trackConfig.checkpoints[0];
+    const midX = (lastCheckpoint.x + firstCheckpoint.x) / 2;
+    const midZ = (lastCheckpoint.z + firstCheckpoint.z) / 2;
+    const length = Math.sqrt(
+      Math.pow(firstCheckpoint.x - lastCheckpoint.x, 2) +
+      Math.pow(firstCheckpoint.z - lastCheckpoint.z, 2)
+    );
+    const angle = Math.atan2(firstCheckpoint.z - lastCheckpoint.z, firstCheckpoint.x - lastCheckpoint.x);
+    
     elements.push(
-      <mesh key="road-surface" position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[trackConfig.width * 2, trackConfig.length]} />
+      <mesh 
+        key="road-segment-closing" 
+        position={[midX, 0, midZ]} 
+        rotation={[-Math.PI/2, 0, angle]}
+        receiveShadow
+      >
+        <planeGeometry args={[length, trackConfig.width * 2]} />
         <meshStandardMaterial 
           color="#2a2a2a" 
           roughness={0.9} 
@@ -36,27 +81,26 @@ export default function AdvancedTrack({ trackConfig }: AdvancedTrackProps) {
       </mesh>
     );
 
-    // Track border lines
-    elements.push(
-      <mesh key="border-left" position={[-trackConfig.width, 0.01, 0]} receiveShadow>
-        <planeGeometry args={[0.2, trackConfig.length]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-    );
-    elements.push(
-      <mesh key="border-right" position={[trackConfig.width, 0.01, 0]} receiveShadow>
-        <planeGeometry args={[0.2, trackConfig.length]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
-    );
-
-    // Center line (dashed)
-    elements.push(
-      <mesh key="center-line" position={[0, 0.02, 0]} receiveShadow>
-        <planeGeometry args={[0.1, trackConfig.length]} />
-        <meshStandardMaterial color="#ffff00" />
-      </mesh>
-    );
+    // Racing line markers along the path
+    trackConfig.checkpoints.forEach((checkpoint, index) => {
+      elements.push(
+        <mesh 
+          key={`racing-line-${index}`} 
+          position={[checkpoint.x, 0.05, checkpoint.z]} 
+          rotation={[-Math.PI/2, 0, 0]}
+          receiveShadow
+        >
+          <circleGeometry args={[15, 32]} />
+          <meshStandardMaterial 
+            color="#00ff00" 
+            transparent
+            opacity={0.2}
+            emissive="#00ff00"
+            emissiveIntensity={0.2}
+          />
+        </mesh>
+      );
+    });
 
     // Start/Finish line
     const startPos = trackConfig.checkpoints[0];
@@ -289,32 +333,60 @@ function CheckpointComponent({ position, index }: { position: any; index: number
   const isStartFinish = index === 0;
   
   return (
-    <group position={[position.x, position.y, position.z]}>
-      {/* Checkpoint pillar */}
-      <mesh position={[0, 2, 0]} castShadow>
-        <cylinderGeometry args={[0.2, 0.2, 4, 8]} />
+    <group position={[position.x, position.y + 2, position.z]}>
+      {/* Left pillar */}
+      <mesh position={[-6, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.3, 0.3, 6, 8]} />
         <meshStandardMaterial 
           color={isStartFinish ? "#ffff00" : "#00ff00"} 
           emissive={isStartFinish ? "#ffff00" : "#00ff00"}
-          emissiveIntensity={0.5}
+          emissiveIntensity={0.6}
         />
       </mesh>
       
-      {/* Checkpoint flag */}
-      <mesh position={[0.5, 3, 0]} rotation={[0, 0, Math.PI/8]} castShadow>
-        <planeGeometry args={[1.5, 1]} />
+      {/* Right pillar */}
+      <mesh position={[6, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.3, 0.3, 6, 8]} />
         <meshStandardMaterial 
           color={isStartFinish ? "#ffff00" : "#00ff00"} 
-          transparent
-          opacity={0.8}
+          emissive={isStartFinish ? "#ffff00" : "#00ff00"}
+          emissiveIntensity={0.6}
         />
       </mesh>
       
-      {/* Checkpoint number */}
-      <mesh position={[0, 1, 0]} castShadow>
-        <boxGeometry args={[0.5, 0.3, 0.1]} />
-        <meshStandardMaterial color="#ffffff" />
+      {/* Horizontal banner */}
+      <mesh position={[0, 2.5, 0]} rotation={[0, 0, 0]}>
+        <boxGeometry args={[12, 0.8, 0.2]} />
+        <meshStandardMaterial 
+          color={isStartFinish ? "#ffff00" : "#00ff00"} 
+          emissive={isStartFinish ? "#ffff00" : "#00ff00"}
+          emissiveIntensity={0.4}
+        />
       </mesh>
+      
+      {/* Checkpoint number display */}
+      <mesh position={[0, 3, 0.2]} castShadow>
+        <boxGeometry args={[1.5, 0.6, 0.1]} />
+        <meshStandardMaterial 
+          color="#ffffff"
+          emissive="#ffffff"
+          emissiveIntensity={0.3}
+        />
+      </mesh>
+      
+      {/* Light beams */}
+      <pointLight 
+        position={[-6, 3, 0]} 
+        color={isStartFinish ? "#ffff00" : "#00ff00"} 
+        intensity={2}
+        distance={20}
+      />
+      <pointLight 
+        position={[6, 3, 0]} 
+        color={isStartFinish ? "#ffff00" : "#00ff00"} 
+        intensity={2}
+        distance={20}
+      />
     </group>
   );
 }
